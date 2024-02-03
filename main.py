@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import sqlite3
 
 load_dotenv()
-TOKEN = os.getenv("TOKEN")
+TOKEN = os.environ["TOKEN"]
 
 intents = discord.Intents.default()
 intents.messages = True
