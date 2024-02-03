@@ -1,5 +1,7 @@
 # Time Clock Bot
 
+![demo](demo.png "Demo")
+
 ## Overview
 This Discord bot is designed to provide simple time tracking functionality for users in a Discord server. This was made for a friend who needed to track the working hours of their contractors for their online business. It allows users to check in and check out, tracking their total time spent and the number of check-ins. The bot also provides a leaderboard to display top users by total time and individual user statistics. 
 
