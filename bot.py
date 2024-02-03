@@ -11,7 +11,7 @@ intents = discord.Intents.default()
 intents.messages = True
 intents.message_content = True
 intents.typing = True
-intents.members = True  # Enable intents for accessing member information
+intents.members = True
 bot = discord.Client(intents=intents)
 
 # Database setup
@@ -23,7 +23,8 @@ cursor.execute('''
         check_in TIMESTAMP,
         total_time INTEGER DEFAULT 0,
         total_checkins INTEGER DEFAULT 0,
-        last_checkout TIMESTAMP
+        last_checkout TIMESTAMP,
+        last_session_time TEXT
     )
 ''')
 conn.commit()
@@ -46,7 +47,10 @@ async def on_message(message):
             DO UPDATE SET check_in = ?
         ''', (str(message.author.id), now, now))
         conn.commit()
-        await message.channel.send(f'Check-in recorded at {now.strftime("%Y-%m-%d %H:%M:%S")}')
+        embed = discord.Embed(title="Check-In", description=f"<@{str(message.author.id)}> has checked in.", color=0x00ff00)
+        embed.add_field(name="Time", value=now.strftime("%Y-%m-%d %H:%M:%S"), inline=False)
+        await message.channel.send(embed=embed)
+
 
     elif message.content == '!check-out':
         cursor.execute('SELECT check_in FROM timeclock WHERE user_id = ?', (str(message.author.id),))
@@ -59,36 +63,53 @@ async def on_message(message):
                 UPDATE timeclock
                 SET total_time = total_time + ?,
                     total_checkins = total_checkins + 1,
-                    check_in = NULL
+                    check_in = NULL,
+                    last_checkout = ?,
+                    last_session_time = ?
                 WHERE user_id = ?
-            ''', (duration.seconds, str(message.author.id)))
+            ''', (duration.seconds, now, str(duration), str(message.author.id)))
             conn.commit()
-            await message.channel.send(f'Check-out recorded at {now.strftime("%Y-%m-%d %H:%M:%S")}. Session Duration: {duration.seconds} seconds')
-
+            embed = discord.Embed(title="Check-Out", description=f"<@{str(message.author.id)}>'s session has ended.", color=0xff0000)
+            embed.add_field(name="Check-out Time", value=now.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+            embed.add_field(name="Session Duration", value=f"{duration.seconds} seconds", inline=True)
+            await message.channel.send(embed=embed)
+    
     elif message.content.startswith('!stats'):
         args = message.content.split()
         user_id = str(message.author.id)
+
         if len(args) > 1:
-            member_name = args[1]
-            member = discord.utils.get(message.guild.members, name=member_name)
+            mention = args[1]
+            # Strip characters to get the user ID from the mention
+            mentioned_id = mention.strip('<@!>')
+            member = message.guild.get_member(int(mentioned_id))
             if member:
                 user_id = str(member.id)
 
-        cursor.execute('SELECT total_time, total_checkins, last_checkout FROM timeclock WHERE user_id = ?', (user_id,))
+        cursor.execute('SELECT total_time, total_checkins, last_checkout, last_session_time FROM timeclock WHERE user_id = ?', (user_id,))
         stats = cursor.fetchone()
         if stats:
-            total_time, total_checkins, last_checkout = stats
-            last_checkout_str = last_checkout.strftime("%Y-%m-%d %H:%M:%S") if last_checkout else "N/A"
-            response = f'**Total Time**: {total_time} seconds\n**Total Check-Ins**: {total_checkins}\n**Last Check-Out**: {last_checkout_str}'
-            await message.channel.send(response)
+            total_time, total_checkins, last_checkout_str, last_session_time = stats
+            if last_checkout_str:
+                last_checkout = datetime.fromisoformat(last_checkout_str)
+                last_checkout_str = last_checkout.strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                last_checkout_str = "N/A"
+
+            embed = discord.Embed(title="User Statistics", description=f"Stats for <@{user_id}>", color=0x00ff00)
+            embed.add_field(name="Total Time", value=f"{total_time} seconds", inline=True)
+            embed.add_field(name="Total Check-Ins", value=str(total_checkins), inline=True)
+            embed.add_field(name="Last Check-Out", value=last_checkout_str, inline=False)
+            embed.add_field(name="Last Session Time", value=last_session_time, inline=False)
+            await message.channel.send(embed=embed)
 
     elif message.content == '!leaderboard':
         cursor.execute('SELECT user_id, total_time, total_checkins FROM timeclock ORDER BY total_time DESC')
         leaderboard = cursor.fetchall()
-        response = "**Leaderboard**:\n"
+        embed = discord.Embed(title="Leaderboard", description="Top Users by Total Time", color=0xffc0cb)
         for idx, (user_id, total_time, total_checkins) in enumerate(leaderboard, 1):
             member = await bot.fetch_user(user_id)
-            response += f'{idx}. {member.name} - Total Time: {total_time} seconds, Total Check-Ins: {total_checkins}\n'
-        await message.channel.send(response)
+            embed.add_field(name=f"{idx}. {str(member.display_name)}", value=f"Total Time: {total_time} seconds, Total Check-Ins: {total_checkins}", inline=False)
+        await message.channel.send(embed=embed)
 
 bot.run(TOKEN)
