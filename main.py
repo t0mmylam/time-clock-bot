@@ -29,6 +29,11 @@ cursor.execute('''
 ''')
 conn.commit()
 
+def isCheckedIn(user_id) -> bool:
+    cursor.execute('SELECT check_in FROM timeclock WHERE user_id = ?', (user_id,))
+    check_in_time = cursor.fetchone()
+    return check_in_time is not None
+
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
@@ -39,6 +44,10 @@ async def on_message(message):
         return
 
     if message.content.startswith('!check-in'):
+        if isCheckedIn(str(message.author.id)):
+            await message.channel.send(f"<@{str(message.author.id)}> is already checked in.")
+            return
+        
         now = datetime.now()
         cursor.execute('''
             INSERT INTO timeclock (user_id, check_in)
