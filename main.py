@@ -44,10 +44,6 @@ async def on_message(message):
         return
 
     if message.content.startswith('!check-in'):
-        if isCheckedIn(str(message.author.id)):
-            await message.channel.send(f"<@{str(message.author.id)}> is already checked in.")
-            return
-        
         now = datetime.now()
         cursor.execute('''
             INSERT INTO timeclock (user_id, check_in)
